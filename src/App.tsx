@@ -14,6 +14,7 @@ function App() {
   const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
 
   const emailsRegex = /^([\w+-.%]+@[\w-.]+\.[A-Za-z]{2,4},?)+$/;
+  var accessToken = "";
 
   const parseTextarea = (textarea: ChangeEvent<HTMLTextAreaElement>) => {
     if (emailsRegex.test(textarea.target.value)) {
@@ -28,47 +29,8 @@ function App() {
       scope: 'https://www.googleapis.com/auth/calendar.readonly',
       onSuccess: async (resp) => {
         setIsLoggedIn(true);
-
-        const date = new Date();
-
-        const response = await axios.get(
-          `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
-          {
-            params: {
-              'eventType': 'outOfOffice',
-              'timeMin': date.toISOString(),
-              'timeMax': new Date(date.setMonth(date.getMonth() + 1)).toISOString(),
-            },
-            headers: {
-              Authorization: `Bearer ${resp.access_token}`,
-            },
-          }
-        );
-
-        const events = response.data.items;
-        console.log(events)
-        events.forEach((e: calendar_v3.Schema$Event) => {
-          console.log(e);
-          if (e.start != null) {
-            const realDate = new Date(e.start?.dateTime!);
-            console.log(realDate.toISOString().split('T')[0])
-            setCalendarEvents([{
-              title: e.summary,
-              start: realDate.toISOString().split('T')[0],
-            }]);
-          }
-
-        });
-        // Fetch calendar events from the Google Calendar API using the credentialResponse
-        // and set them to the calendarEvents state.
-        // You will need to implement the logic to fetch events from the API here.
-        // For simplicity, I'm setting an empty array for now.
-        // setCalendarEvents([
-        //   {
-        //     title: 'All Day Event',
-        //     start: '2023-08-01',
-        //   }
-        // ]);
+        accessToken = resp.access_token;
+        fetchAndApplyCalendars();
       },
       onError: (error) => {
         console.error('Login failed:', error);
@@ -82,6 +44,41 @@ function App() {
       </button>
     );
   };
+
+  const fetchAndApplyCalendars = async () => {
+    const date = new Date();
+
+    const response = await axios.get(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
+      {
+        params: {
+          'eventTypes': ['outOfOffice'],
+          'timeMin': date.toISOString(),
+          'timeMax': new Date(date.setMonth(date.getMonth() + 1)).toISOString(),
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    const events = response.data.items;
+    var newCalendarEvents: any[] = [];
+    events.forEach((e: calendar_v3.Schema$Event) => {
+      console.log(e);
+      if (e.eventType! === "outOfOffice" && e.start != null) {
+        const realDate = new Date(e.start?.dateTime!);
+        console.log(realDate.toISOString().split('T')[0])
+        newCalendarEvents.push({
+          title: e.creator?.email!,
+          allDay: true,
+          start: realDate,
+        });
+      }
+    });
+    console.log(newCalendarEvents);
+    setCalendarEvents(newCalendarEvents);
+  }
 
   const applyEmails = () => {
 
