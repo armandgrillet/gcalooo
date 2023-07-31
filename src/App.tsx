@@ -13,11 +13,22 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
 
-  const emailsRegex = /^([\w+-.%]+@[\w-.]+\.[A-Za-z]{2,4},?)+$/;
+  const timerangeEnv = process.env.REACT_APP_TIMERANGE_MONTHS ?? "3";
+  const timerange = parseInt(timerangeEnv);
+  const now = new Date();
+  const future = new Date();
+  future.setMonth(future.getMonth() + timerange);
+
+  const queryParameters = new URLSearchParams(window.location.search)
+  var emails = queryParameters.get("emails") ?? "";
+  console.log(emails)
+  const emailsRegex = /^([\w+-.%]+@[\w-.]+\.[A-Za-z]{2,4}?)+$/;
+
   var accessToken = "";
 
   const parseTextarea = (textarea: ChangeEvent<HTMLTextAreaElement>) => {
     if (emailsRegex.test(textarea.target.value)) {
+      emails = textarea.target.value;
       document.getElementById('apply')!.className = 'btn btn-primary';
     } else {
       document.getElementById('apply')!.className = 'btn btn-primary disabled';
@@ -39,63 +50,75 @@ function App() {
     });
 
     return (
-      <button onClick={() => signIn()}>
-        Login with Google
-      </button>
+      <div className="text-center">
+        <button className="btn btn-primary" onClick={() => signIn()}>
+          Login with Google
+        </button>
+      </div>
     );
   };
 
   const fetchAndApplyCalendars = async () => {
-    const date = new Date();
+    var calendars: string[] = [];
+    if (emails === "") {
+      calendars = ["primary"]
+    } else {
+      calendars = emails.split(",");
+      calendars.push("primary");
+    }
 
-    const response = await axios.get(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events`,
-      {
-        params: {
-          'eventTypes': ['outOfOffice'],
-          'timeMin': date.toISOString(),
-          'timeMax': new Date(date.setMonth(date.getMonth() + 1)).toISOString(),
-        },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
-
-    const events = response.data.items;
+    console.log(calendars)
     var newCalendarEvents: any[] = [];
-    events.forEach((e: calendar_v3.Schema$Event) => {
-      console.log(e);
-      if (e.eventType! === "outOfOffice" && e.start != null) {
-        const realDate = new Date(e.start?.dateTime!);
-        console.log(realDate.toISOString().split('T')[0])
-        newCalendarEvents.push({
-          title: e.creator?.email!,
-          allDay: true,
-          start: realDate,
-        });
-      }
-    });
-    console.log(newCalendarEvents);
+
+    for await (const calendar of calendars) {
+      console.log(calendar)
+      const response = await axios.get(
+        `https://www.googleapis.com/calendar/v3/calendars/${calendar}/events`,
+        {
+          params: {
+            'eventTypes': ['outOfOffice'],
+            'timeMin': now.toISOString(),
+            'timeMax': future.toISOString(),
+          },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      ).catch(function (error) {
+        console.log(error.toJSON());
+      });;
+
+      if (typeof response !== 'undefined') {
+        const events = response!.data.items;
+        events.forEach((e: calendar_v3.Schema$Event) => {
+          if (e.eventType! === "outOfOffice" && e.start != null) {
+            console.log(e)
+            newCalendarEvents.push({
+              title: e.creator?.email!,
+              allDay: true,
+              start: new Date(e.start?.dateTime!),
+              end: new Date(e.end?.dateTime!)
+            });
+          }
+      });
+    }
+    }
     setCalendarEvents(newCalendarEvents);
-  }
-
-  const applyEmails = () => {
-
+    queryParameters.set("emails", emails);
   }
 
   return (
     <div className="App">
       <div className="container px-4 py-5">
-        <h2 className="pb-2 border-bottom">Columns with icons</h2>
+        <h2 className="pb-2 border-bottom">{process.env.REACT_APP_TITLE}</h2>
         {!isLoggedIn ? (
           <LoginButton />
         ) : (
           <>
             <div className="input-group">
               <span className="input-group-text">List of emails</span>
-              <textarea className="form-control" aria-label="With textarea" placeholder='alice@example.com, bob@example.com' onChange={parseTextarea}></textarea>
-              <button className="btn btn-primary" type="button" id="apply" onClick={applyEmails}>Apply</button>
+              <textarea className="form-control" id="emails" aria-label="With textarea" placeholder='alice@example.com, bob@example.com' onChange={parseTextarea}></textarea>
+              <button className="btn btn-primary" type="button" id="apply" onClick={fetchAndApplyCalendars}>Apply</button>
             </div>
             <br></br>
             <div className='demo-app-main'>
