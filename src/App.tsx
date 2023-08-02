@@ -9,6 +9,8 @@ import { calendar_v3 } from 'googleapis';
 
 import axios from 'axios';
 
+var accessToken = "";
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
@@ -19,12 +21,11 @@ function App() {
   const future = new Date();
   future.setMonth(future.getMonth() + timerange);
 
+  const emailDomain = process.env.REACT_APP_EMAIL_DOMAIN ?? "";
   const queryParameters = new URLSearchParams(window.location.search)
   var emails = queryParameters.get("emails") ?? "";
   console.log(emails)
   const emailsRegex = /^([\w+-.%]+@[\w-.]+\.[A-Za-z]{2,4}?)+$/;
-
-  var accessToken = "";
 
   const parseTextarea = (textarea: ChangeEvent<HTMLTextAreaElement>) => {
     if (emailsRegex.test(textarea.target.value)) {
@@ -33,6 +34,28 @@ function App() {
     } else {
       document.getElementById('apply')!.className = 'btn btn-primary disabled';
     }
+  }
+
+  const stringToColor = (str: string) => {
+    var hash = 0;
+    str.split('').forEach(char => {
+      hash = char.charCodeAt(0) + ((hash << 5) - hash)
+    })
+    let color = '#'
+    for (let i = 0; i < 3; i++) {
+      const value = (hash >> (i * 8)) & 0xff
+      color += value.toString(16).padStart(2, '0')
+    }
+    return color
+  }
+
+  function tectColorforColor(bgColor: string) {
+    var color = (bgColor.charAt(0) === '#') ? bgColor.substring(1, 7) : bgColor;
+    var r = parseInt(color.substring(0, 2), 16); // hexToR
+    var g = parseInt(color.substring(2, 4), 16); // hexToG
+    var b = parseInt(color.substring(4, 6), 16); // hexToB
+    return (((r * 0.299) + (g * 0.587) + (b * 0.114)) > 186) ?
+      "#000" : "#fff";
   }
 
   const LoginButton: React.FC = () => {
@@ -71,37 +94,40 @@ function App() {
     var newCalendarEvents: any[] = [];
 
     for await (const calendar of calendars) {
-      console.log(calendar)
-      const response = await axios.get(
-        `https://www.googleapis.com/calendar/v3/calendars/${calendar}/events`,
-        {
-          params: {
-            'eventTypes': ['outOfOffice'],
-            'timeMin': now.toISOString(),
-            'timeMax': future.toISOString(),
-          },
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      ).catch(function (error) {
-        console.log(error.toJSON());
-      });;
-
-      if (typeof response !== 'undefined') {
-        const events = response!.data.items;
-        events.forEach((e: calendar_v3.Schema$Event) => {
-          if (e.eventType! === "outOfOffice" && e.start != null) {
-            console.log(e)
-            newCalendarEvents.push({
-              title: e.creator?.email!,
-              allDay: true,
-              start: new Date(e.start?.dateTime!),
-              end: new Date(e.end?.dateTime!)
-            });
+      if (calendar === "primary" || calendar.includes(emailDomain)) {
+        const response = await axios.get(
+          `https://www.googleapis.com/calendar/v3/calendars/${calendar}/events`,
+          {
+            params: {
+              'eventTypes': ['outOfOffice'],
+              'timeMin': now.toISOString(),
+              'timeMax': future.toISOString(),
+            },
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
           }
-      });
-    }
+        ).catch(function (error) {
+          console.log(error.toJSON());
+        });;
+
+        if (typeof response !== 'undefined') {
+          const events = response!.data.items;
+          events.forEach((e: calendar_v3.Schema$Event) => {
+            if (e.eventType! === "outOfOffice" && e.start != null) {
+              console.log(e)
+              newCalendarEvents.push({
+                title: e.creator?.email!,
+                color: stringToColor(e.creator?.email!),
+                textColor: tectColorforColor(stringToColor(e.creator?.email!)),
+                allDay: true,
+                start: new Date(e.start?.dateTime!),
+                end: new Date(e.end?.dateTime!)
+              });
+            }
+          });
+        }
+      }
     }
     setCalendarEvents(newCalendarEvents);
     queryParameters.set("emails", emails);
