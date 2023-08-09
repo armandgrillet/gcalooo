@@ -9,10 +9,13 @@
 	// "features": {},
 
 	// This makes the website accessible on local network.
-	"runArgs": ["-p=3000:3000"],
+	// "runArgs": ["-p=3000:3000"],
 
 	"containerEnv": {
-		"REACT_APP_GOOGLE_CLIENT_ID": "you-google-client-id-here"
+		"REACT_APP_TITLE": "",
+		"REACT_APP_GOOGLE_CLIENT_ID": "",
+		"REACT_APP_TIMERANGE_MONTHS": "",
+		"REACT_APP_EMAIL_DOMAIN": ""
 	},
 
 	// Use 'postCreateCommand' to run commands after the container is created.
